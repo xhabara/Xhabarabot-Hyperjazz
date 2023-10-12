@@ -11,6 +11,12 @@ let prevMouseY = 0;
 let startButton;
 let autonomousMode = false;
 
+let soundRecorder;
+let recording;
+let saveButton;
+let isRecording = false;
+let needsSaving = false;
+
 window.addEventListener("keydown", function (e) {
   if (e.key === "s") {
     saveSketch();
@@ -26,7 +32,7 @@ function preload() {
 }
 
 function saveSketch() {
-  saveCanvas("mySketch", "png");
+  saveCanvas("HyperjazzSketch", "png");
 }
 
 function startSketch() {
@@ -37,26 +43,108 @@ function startSketch() {
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  createCanvas(800, 600);
   background(22);
 
-  mySound1.setVolume(1);
-  mySound2.setVolume(1);
-  mySound3.setVolume(1);
+  // Audio setup
+  mySound1.setVolume(0.5);
+  mySound2.setVolume(0.3);
+  mySound3.setVolume(0.3);
 
+  // Start/Stop Button
   startButton = createButton("Start/Stop");
   startButton.position(20, 20);
   startButton.mousePressed(startStop);
+  startButton.style('background-color', '#ff0000');
+  startButton.style('color', '#ffffff');
+  startButton.style('font-size', '13px');
   
-  tempoSlider = createSlider(0.5, 2, 1, 0.1); 
-  tempoSlider.position(420, 20);
+// Tempo Slider
+tempoSlider = createSlider(0.2, 3, 1, 0.1); 
+tempoSlider.position(550, 20);
+tempoSlider.style('width', '200px');
+tempoSlider.style('-webkit-appearance', 'none');
+tempoSlider.style('appearance', 'none');
+tempoSlider.style('background', '#F9F9F4');
+tempoSlider.style('outline', '10px');
+tempoSlider.style('opacity', '100');
+tempoSlider.style('border-radius', '12px');
+tempoSlider.style('height', '15px');
+  tempoSlider.hide();
 
+
+
+  // Autonomous Mode Button
   let autonomousButton = createButton("XHABARABOT TAKEOVER"); 
-  autonomousButton.position(150, 20);
+  autonomousButton.position(145, 20);
   autonomousButton.mousePressed(() => {
     autonomousMode = !autonomousMode;
     autonomousButton.html(autonomousMode ? "STOP XHABARABOT MODE" : "XHABARABOT TAKEOVER");
+    if (autonomousMode) {
+    tempoSlider.show();  
+  } else {
+    tempoSlider.hide();  
+  }
+
   });
+  autonomousButton.style('background-color', '#0000ff');
+  autonomousButton.style('color', '#ffffff');
+  autonomousButton.style('font-size', '13px');
+  
+  // Recorder setup and Save button
+  soundRecorder = new p5.SoundRecorder();
+  recording = new p5.SoundFile();
+  saveButton = createButton("Start Recording");
+  saveButton.position(350, 20);
+  saveButton.mousePressed(toggleRecording);
+  saveButton.style('background-color', '#00ff00');
+  saveButton.style('color', '#000000');
+  saveButton.style('font-size', '13px');
+}
+
+
+function toggleRecording() {
+  isRecording = !isRecording;
+  if (isRecording) {
+    // Start recording
+    soundRecorder.setInput(mySound1, mySound2, mySound3);  // Listen to these sounds
+    soundRecorder.record(recording);  // Start recording to the file
+    saveButton.html("Download Recording");  // Change button label
+  } else {
+      soundRecorder.stop();  // Stop the recording
+    needsSaving = true;  // Flag that we want to save once the recording is done
+  }
+}
+
+function normalizeAndSave() {
+  let buffer = recording.buffer;
+  
+  if (buffer) {
+    let maxVal = 0;
+    let sampleRate = 100;  
+
+    // Find a "representative" max value by sampling
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      let data = buffer.getChannelData(channel);
+      for (let i = 0; i < data.length; i += sampleRate) {
+        maxVal = Math.max(maxVal, Math.abs(data[i]));
+      }
+    }
+
+    // Calculate normalization factor
+    let normalizeFactor = 0.8 / maxVal;  // 0.8 or any non-peaking value 
+
+    // Apply normalization factor
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      let data = buffer.getChannelData(channel);
+      for (let i = 0; i < data.length; i++) {
+        data[i] *= normalizeFactor;
+      }
+    }
+
+    // Save the recording
+    saveSound(recording, 'HyperjazzNormalizedRecording.wav');
+  }
 }
 
 
@@ -74,13 +162,6 @@ function startStop() {
   }
 }
 
-let autonomousButton = createButton("XHABARABOT TAKEOVER");
-autonomousButton.position(150, 20);
-autonomousButton.mousePressed(() => {
-  autonomousMode = !autonomousMode;
-  autonomousButton.html(autonomousMode ? "STOP XHABARABOT MODE" : "XHABARABOT TAKEOVER");
-});
-
 function draw() {
   let tempo = tempoSlider.value(); 
 
@@ -94,9 +175,12 @@ function draw() {
 
       mouseX = noise(frameCount * 0.05 * tempo + disruptionX * 0.001) * width; 
       mouseY = noise(frameCount * 0.05 * tempo + 1000 + disruptionY * 0.001) * height; 
-      mySound1.rate((sin(frameCount * 0.1 * tempo) + disruptionX * 0.01) * tempo); 
-      mySound2.rate((cos(frameCount * 0.2 * tempo) + disruptionY * 0.01) * tempo); 
-      mySound3.rate(tan(frameCount * 0.03 * tempo) * 2 * tempo); // Apply tempo
+     
+      mySound1.rate((sin(frameCount * 0.1) + disruptionX * 0.01) * tempo); 
+mySound2.rate((cos(frameCount * 0.2) + disruptionY * 0.01) * tempo); 
+mySound3.rate(tan(frameCount * 0.03) * 2 * tempo);
+
+
       mySound1.setVolume(random(1, 50) + abs(disruptionX) * 1);
       mySound2.setVolume(random(5, 2) + abs(disruptionY) * 0.1);
       mySound3.setVolume(random(2, 10));
@@ -124,8 +208,12 @@ function draw() {
       rect(mouseX, mouseY, ellipseSize, ellipseSize);
     }
   }
+  
+  if (needsSaving && recording.isLoaded()) {
+    normalizeAndSave();
+    needsSaving = false;
+  }
+
 }
 
-
-
-//Created by Rully Shabara.
+// Created by Rully Shabara 2023
